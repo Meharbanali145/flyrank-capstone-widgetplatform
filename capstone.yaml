@@ -1,0 +1,25 @@
+# Evaluator manifest — DRAFT. Values marked TODO are confirmed in Phase 2/3.
+name: flyrank-capstone-widgetplatform
+run: docker compose up --build
+seed: docker compose exec app npm run seed
+test: docker compose exec app npm test        # optional but recommended
+base_url: http://localhost:3000
+second_origin_test_page: http://localhost:5500   # TODO confirm in Phase 3
+
+endpoints:
+  admin_create_widget:   { method: POST, path: /admin/widgets, auth: bearer }
+  embed_snippet:         { method: GET,  path: /admin/widgets/:id/embed, auth: bearer }
+  widget_config:         { method: GET,  path: /widgets/:publicId/config }
+  widget_bundle_alias:   { method: GET,  path: /widget.js?id=:publicId }
+  submit:                { method: POST, path: /submissions }
+  dashboard_submissions: { method: GET,  path: /dashboard/submissions, auth: bearer }
+  dashboard_stats:       { method: GET,  path: /dashboard/stats/widgets, auth: bearer }
+
+probes:   # how to trigger each acceptance probe (TODO fill in Phase 2/3)
+  malformed_payload:   TODO
+  oversized_payload:   TODO
+  burst:               TODO
+  geo_provider_a_down: TODO   # mock control endpoint
+  geo_all_down:        TODO
+  email_failure:       TODO   # FORCE_EMAIL_FAIL=true
+  honeypot:            TODO

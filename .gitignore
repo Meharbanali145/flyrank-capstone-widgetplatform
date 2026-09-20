@@ -1,0 +1,23 @@
+# secrets — NEVER commit
+.env
+.env.*
+!.env.example
+
+# dependencies & builds
+node_modules/
+dist/
+coverage/
+
+# logs & OS junk
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# editors
+.vscode/
+.idea/
+
+# local data
+pgdata/
+*.sqlite
