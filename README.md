@@ -7,14 +7,21 @@ An embeddable widget and lead-capture platform. A customer defines a widget, pas
 ## Architecture
 
 ```
-Widget Owner --(Bearer key)--> /admin/* ---> Widgets (tenant-isolated)  --> embed snippet
-Customer Site --> <script src=widget.<hash>.js?id=..> --> GET /widgets/:id/config (cached)
-Visitor --> POST /submissions
-              CORS -> rate limit -> validate -> honeypot -> idempotency
-              -> geo (A -> B -> none) -> INSERT submission + INSERT job (one transaction)
-                                             |
-                                    worker -> email/webhook (retries; failure never blocks)
-Widget Owner --(Bearer key)--> /dashboard/* <-- submissions + stats
+Widget Owner (JWT)                Customer Website (any origin)         Website Visitor
+      │                                    │                                   │
+      ▼                                    ▼                                   ▼
+/api/widgets CRUD              <script src="widget.js?id=..">          POST /submissions
+      │                          → GET /widgets/:id/config             (CORS *, rate-limited)
+      ▼                          → renders form (Shadow DOM)                   │
+  widgets table                                                                ▼
+  (tenant-isolated)                                              honeypot → validate → link-heuristic
+      │                                                                        │
+      ▼                                                          geo: provider A → B → none (never throws)
+/api/dashboard/*  ◄──────────────────────────────────────────────  store in submissions table
+  (stats, list)                                                                │
+                                                                                ▼
+                                                                  enqueue email jobs (Postgres queue,
+                                                                  retry w/ backoff, dead-letter + alert)
 ```
 
 Full design: [`docs/DESIGN.md`](docs/DESIGN.md)
