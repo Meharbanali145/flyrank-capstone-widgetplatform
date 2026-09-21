@@ -1,0 +1,11 @@
+process.env.NODE_ENV = 'test';
+process.env.DATABASE_URL = process.env.TEST_DATABASE_URL || 'postgres://widget:widget@localhost:5432/widgetplatform_test';
+process.env.GEO_MODE = 'mock';
+process.env.EMAIL_MODE = 'console';
+process.env.ENABLE_TEST_CONTROLS = 'true';
+process.env.CONTROL_TOKEN = 'test-control-token-0123456789';
+process.env.SEED_TENANT_A_API_KEY = 'test-key-a-0123456789012345';
+process.env.SEED_TENANT_B_API_KEY = 'test-key-b-0123456789012345';
+process.env.JOB_BACKOFF_BASE_S = '0.01';
+process.env.RATE_LIMIT_IP_MAX = process.env.RATE_LIMIT_IP_MAX || '10000';
+process.env.RATE_LIMIT_WIDGET_MAX = process.env.RATE_LIMIT_WIDGET_MAX || '10000';
