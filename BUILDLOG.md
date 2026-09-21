@@ -62,3 +62,19 @@ against a real local Postgres, not mocked.
 - Idempotency key replay -> one row, second response is a 200 with `Idempotent-Replay: true`
 
 19/19 Vitest tests passing (`npm test`).
+
+## Test fix — resilience.test.js drain() timing bug
+
+Found while testing on a real (non-sandbox) machine: `PROBE 5` failed intermittently.
+`drain()` looped calling `worker.runOnce()` with no actual wait between iterations, so
+when a job was scheduled to retry in the future (e.g. `run_at = now() + 40ms`), the loop
+could exhaust its 50 attempts and return `false` (nothing claimable *right now*) before
+that 40ms had actually elapsed — the test then checked job status too early and saw
+`'pending'` instead of the expected `'dead'`.
+
+Not a bug in the app itself — `claimNext()` correctly respects `run_at`, and the app's
+own backoff/dead-letter logic is what the test *proved* was correct once given enough
+real time to run. Fixed by adding a short `sleep(15)` in `drain()` whenever there was
+nothing immediately claimable, so the loop actually waits out the backoff delay instead
+of just polling too fast to see it complete. Re-ran the full suite 3x after the fix with
+no flakiness.
