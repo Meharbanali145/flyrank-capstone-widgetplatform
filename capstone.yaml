@@ -1,25 +1,35 @@
-# Evaluator manifest — DRAFT. Values marked TODO are confirmed in Phase 2/3.
+# Evaluator manifest.
 name: flyrank-capstone-widgetplatform
 run: docker compose up --build
-seed: docker compose exec app npm run seed
-test: docker compose exec app npm test        # optional but recommended
+seed: docker compose exec app node scripts/seed.js
+test: docker compose exec app npm test
 base_url: http://localhost:3000
-second_origin_test_page: http://localhost:5500   # TODO confirm in Phase 3
+second_origin_test_page: http://localhost:5500   # npm run demo (SITE_PORT=5500 by default), see README "Run the demo site"
+auth_header: X-API-Key
 
 endpoints:
-  admin_create_widget:   { method: POST, path: /admin/widgets, auth: bearer }
-  embed_snippet:         { method: GET,  path: /admin/widgets/:id/embed, auth: bearer }
-  widget_config:         { method: GET,  path: /widgets/:publicId/config }
-  widget_bundle_alias:   { method: GET,  path: /widget.js?id=:publicId }
-  submit:                { method: POST, path: /submissions }
-  dashboard_submissions: { method: GET,  path: /dashboard/submissions, auth: bearer }
-  dashboard_stats:       { method: GET,  path: /dashboard/stats/widgets, auth: bearer }
+  admin_create_widget:    { method: POST,  path: /api/widgets, auth: api_key_header }
+  admin_get_widget:       { method: GET,   path: /api/widgets/:id, auth: api_key_header }
+  admin_patch_widget:     { method: PATCH, path: /api/widgets/:id, auth: api_key_header }
+  admin_delete_widget:    { method: DELETE,path: /api/widgets/:id, auth: api_key_header }
+  admin_widget_submissions: { method: GET, path: /api/widgets/:id/submissions, auth: api_key_header }
+  widget_runtime:          { method: GET,  path: /widget-runtime.js }
+  widget_embed_snippet:    { method: GET,  path: /widgets/:publicId/embed.js }
+  widget_config:           { method: GET,  path: /widgets/:publicId/config }
+  submit:                  { method: POST, path: /widgets/:publicId/submissions }
+  dashboard_submissions:   { method: GET,  path: /api/dashboard/submissions, auth: api_key_header }
+  dashboard_stats:         { method: GET,  path: /api/dashboard/stats, auth: api_key_header }
 
-probes:   # how to trigger each acceptance probe (TODO fill in Phase 2/3)
-  malformed_payload:   TODO
-  oversized_payload:   TODO
-  burst:               TODO
-  geo_provider_a_down: TODO   # mock control endpoint
-  geo_all_down:        TODO
-  email_failure:       TODO   # FORCE_EMAIL_FAIL=true
-  honeypot:            TODO
+probes:
+  valid_submission:    "npm run attack (Probe 1); or POST /widgets/:publicId/submissions from a page on a different origin, then GET /api/widgets/:id/submissions"
+  malformed_payload:   "npm run attack (Probe 2); or POST submissions with a missing required field -> 422, or malformed JSON -> 400"
+  oversized_payload:   "npm run attack (Probe 2); or POST a >10KB body -> 413"
+  burst:               "npm run attack (Probe 3); or 15+ rapid POSTs from one IP -> some 429s, /health stays 200"
+  geo_provider_a_down: "npm run attack (Probe 4); or POST /__control/faults {\"ip-api\":true} with X-Control-Token, then submit -> geo_provider becomes ipapi-co"
+  geo_all_down:        "npm run attack (Probe 4); or POST /__control/faults {\"ip-api\":true,\"ipapi-co\":true}, then submit -> 201, no geo"
+  email_failure:       "npm run attack (Probe 5); or POST /__control/faults {\"email\":true}, then submit -> still 2xx; jobs dead-letter after retries (see /__control/state)"
+  honeypot:            "npm run attack (Probe 6); or POST submissions with a non-empty \"website\" field -> 201 but nothing new is stored"
+
+notes:
+  test_controls: "/__control/* only exists when ENABLE_TEST_CONTROLS=true (the default in .env.example; env.js refuses to start with this true in production)."
+  attack_script: "npm run attack regenerates EVIDENCE.md from a LIVE server (real request/response pairs), not written by hand."

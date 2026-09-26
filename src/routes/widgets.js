@@ -8,7 +8,7 @@ const createSchema = z.object({ type: z.enum(['signup_form', 'contact_form', 'ct
 const patchSchema = createSchema.partial();
 const parse = (schema, body) => { const r = schema.safeParse(body); if (!r.success) throw validationError('Validation failed', r.error.issues.map((i) => ({ field: i.path.join('.') || '(body)', message: i.message }))); return r.data; };
 
-export function createWidgetRoutes({ tenantRepo, widgetService }) {
+export function createWidgetRoutes({ tenantRepo, widgetService, submissionRepo }) {
   const router = Router();
   router.use(requireApiKey(tenantRepo));
   router.post('/', (req, res, next) => widgetService.create(req.tenant.id, parse(createSchema, req.body)).then((w) => res.status(201).json({ widget: w, embed: widgetService.embedSnippet(w.publicId) })).catch(next));
@@ -16,5 +16,15 @@ export function createWidgetRoutes({ tenantRepo, widgetService }) {
   router.get('/:id', (req, res, next) => widgetService.get(req.tenant.id, req.params.id).then((w) => res.json({ widget: w, embed: widgetService.embedSnippet(w.publicId) })).catch(next));
   router.patch('/:id', (req, res, next) => widgetService.update(req.tenant.id, req.params.id, parse(patchSchema, req.body)).then((w) => res.json({ widget: w })).catch(next));
   router.delete('/:id', (req, res, next) => widgetService.remove(req.tenant.id, req.params.id).then(() => res.status(204).end()).catch(next));
+  // Owner dashboard (minimal): submissions for one of this tenant's widgets, newest first.
+  // widgetService.get() enforces ownership first, so a 404 here means "not yours", not "empty".
+  router.get('/:id/submissions', async (req, res, next) => {
+    try {
+      await widgetService.get(req.tenant.id, req.params.id);
+      const limit = Math.min(Number(req.query.limit) || 25, 100);
+      const rows = await submissionRepo.listByTenant(req.tenant.id, { widgetId: req.params.id, limit });
+      res.json({ submissions: rows.map((r) => ({ id: r.id, data: r.data, geo: r.country ? { country: r.country, region: r.region, city: r.city, provider: r.geo_provider } : null, createdAt: r.created_at })) });
+    } catch (err) { next(err); }
+  });
   return router;
 }

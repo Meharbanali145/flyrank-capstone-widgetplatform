@@ -9,3 +9,5 @@ process.env.SEED_TENANT_B_API_KEY = 'test-key-b-0123456789012345';
 process.env.JOB_BACKOFF_BASE_S = '0.01';
 process.env.RATE_LIMIT_IP_MAX = process.env.RATE_LIMIT_IP_MAX || '10000';
 process.env.RATE_LIMIT_WIDGET_MAX = process.env.RATE_LIMIT_WIDGET_MAX || '10000';
+// test/setup.js
+process.env.TRUST_PROXY = 'true';  process.env.TRUST_PROXY = '1';   // one hop, not 'true' — see note below

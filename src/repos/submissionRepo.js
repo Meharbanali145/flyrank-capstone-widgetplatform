@@ -27,3 +27,33 @@ export function createSubmissionRepo(pool) {
     },
   };
 }
+
+// Dashboard aggregations: everything scoped by tenant_id in the WHERE clause, never joined
+// implicitly through widgets — a query filtered ONLY by a widget owned by someone else
+// still returns zero rows, not another tenant's data.
+export function createDashboardQueries(pool) {
+  return {
+    async stats(tenantId, days) {
+      const [totals, perWidget, overTime, geo] = await Promise.all([
+        pool.query(
+          `SELECT count(*)::int AS total,
+                  count(*) FILTER (WHERE created_at > now() - interval '24 hours')::int AS last_24h,
+                  count(*) FILTER (WHERE created_at > now() - interval '7 days')::int AS last_7d
+           FROM submissions WHERE tenant_id = $1`, [tenantId]),
+        pool.query(
+          `SELECT w.public_id AS widget_id, w.title, count(s.id)::int AS submissions, max(s.created_at) AS last_submission_at
+           FROM widgets w LEFT JOIN submissions s ON s.widget_id = w.id AND s.tenant_id = w.tenant_id
+           WHERE w.tenant_id = $1 GROUP BY w.id ORDER BY submissions DESC, w.title`, [tenantId]),
+        pool.query(
+          `SELECT to_char(d::date, 'YYYY-MM-DD') AS day, count(s.id)::int AS submissions
+           FROM generate_series((now() AT TIME ZONE 'UTC')::date - ($2::int - 1), (now() AT TIME ZONE 'UTC')::date, interval '1 day') d
+           LEFT JOIN submissions s ON s.tenant_id = $1 AND (s.created_at AT TIME ZONE 'UTC')::date = d::date
+           GROUP BY d ORDER BY d`, [tenantId, days]),
+        pool.query(
+          `SELECT coalesce(country, 'Unknown') AS country, count(*)::int AS submissions
+           FROM submissions WHERE tenant_id = $1 GROUP BY country ORDER BY submissions DESC LIMIT 50`, [tenantId]),
+      ]);
+      return { totals: totals.rows[0], perWidget: perWidget.rows, overTime: overTime.rows, geo: geo.rows };
+    },
+  };
+}

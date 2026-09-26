@@ -8,16 +8,18 @@
   "engines": {
     "node": ">=20"
   },
+
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "node --watch src/server.js",
-    "worker": "node src/jobs/worker.js",
-    "migrate": "node-pg-migrate up -m migrations",
-    "migrate:down": "node-pg-migrate down -m migrations",
-    "seed": "node scripts/seed.js",
-    "attack": "node scripts/attack.js",
-    "test": "vitest run"
-  },
+  "start": "node src/server.js",
+  "dev": "node --watch src/server.js",
+  "worker": "node src/jobs/worker.js",
+  "migrate": "node-pg-migrate up -m migrations",
+  "migrate:down": "node-pg-migrate down -m migrations",
+  "seed": "node scripts/seed.js",
+  "demo": "node scripts/serve-site.js",
+  "attack": "node scripts/attack.js",
+  "test": "vitest run"
+},
   "dependencies": {
     "cors": "^2.8.6",
     "dotenv": "^18.0.1",
@@ -28,6 +30,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "jsdom": "^29.1.1",
     "supertest": "^7.2.2",
     "vitest": "^5.0.1"
   }

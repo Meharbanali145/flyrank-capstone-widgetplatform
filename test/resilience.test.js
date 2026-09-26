@@ -14,14 +14,13 @@ afterAll(() => ctx.close());
 beforeEach(async () => { ctx.faults.reset(); await ctx.pool.query('TRUNCATE jobs RESTART IDENTITY'); });
 
 const lastRow = async () => (await ctx.pool.query("select country, geo_provider from submissions where widget_id=$1 order by created_at desc limit 1", [widget.id])).rows[0];
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const drain = async () => {
-  for (let i = 0; i < 200; i++) {
+  for (let i = 0; i < 50; i++) {
     const more = await worker.runOnce();
     if (!more) {
       const { rows } = await ctx.pool.query("select count(*)::int n from jobs where status in ('pending','running')");
       if (rows[0].n === 0) return;
-      await sleep(15); // nothing was due yet — give the backoff delay time to actually elapse
+      await new Promise((r) => setTimeout(r, 15));
     }
   }
 };

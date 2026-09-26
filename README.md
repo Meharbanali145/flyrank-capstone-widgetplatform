@@ -2,47 +2,81 @@
 
 An embeddable widget and lead-capture platform. A customer defines a widget, pastes one `<script>` line into any website, and visitors' submissions come back to a backend that validates them, filters spam, enriches them with location data, stores them, and shows them to the owner through a dashboard API.
 
-> **Status: Phase 1 (Design) complete.** Code arrives in Phase 2. The run steps below are the *target* and will be verified before submission.
+> **Status: Phase 3 complete.** 27/27 automated tests pass (`npm test`). Acceptance probes were also run live against a real server (`npm run attack`); the transcript is in [`EVIDENCE.md`](EVIDENCE.md), captured by the script itself, not hand-written.
 
 ## Architecture
 
 ```
-Widget Owner (JWT)                Customer Website (any origin)         Website Visitor
-      │                                    │                                   │
-      ▼                                    ▼                                   ▼
-/api/widgets CRUD              <script src="widget.js?id=..">          POST /submissions
-      │                          → GET /widgets/:id/config             (CORS *, rate-limited)
-      ▼                          → renders form (Shadow DOM)                   │
-  widgets table                                                                ▼
-  (tenant-isolated)                                              honeypot → validate → link-heuristic
-      │                                                                        │
-      ▼                                                          geo: provider A → B → none (never throws)
-/api/dashboard/*  ◄──────────────────────────────────────────────  store in submissions table
-  (stats, list)                                                                │
-                                                                                ▼
-                                                                  enqueue email jobs (Postgres queue,
-                                                                  retry w/ backoff, dead-letter + alert)
+Widget Owner (X-API-Key)              Customer Website (any origin)          Website Visitor
+      │                                      │                                     │
+      ▼                                      ▼                                     ▼
+/api/widgets  CRUD                <script src=".../widgets/:id/embed.js">   POST /widgets/:id/submissions
+/api/widgets/:id/submissions        │ loads widget-runtime.js ONCE per page   (CORS *, per-widget rate limit)
+/api/dashboard  stats + list        │ (versioned, cached hard once pinned)          │
+      │                             ▼                                    honeypot -> validate -> idempotency
+      ▼                    GET /widgets/:id/config                                 │
+  widgets / submissions      (public, cached 60s)                    geo: provider A -> B -> none (never throws)
+  tables (tenant-isolated)                                                         │
+      ▲                                                              BEGIN; INSERT submission; INSERT jobs; COMMIT
+      └─────────────────────────────────────────────────────────────────────────────┘
+                                                                     worker (outbox) -> email/webhook
+                                                                     retries w/ backoff, dead-letters on failure
 ```
 
-Full design: [`docs/DESIGN.md`](docs/DESIGN.md)
+Full design: [`DESIGN.md`](DESIGN.md) — note the auth mechanism there (Bearer) predates the build; the shipped API uses an `X-API-Key` header, documented accurately in this README and `capstone.yaml`.
 
-## Run it (target — finalised in Phase 2)
+## Run it
+
+```bash
+cp .env.example .env          # edit SEED_*_API_KEY / CONTROL_TOKEN if you like
+docker compose up --build     # Postgres + the app; migrates + seeds + starts on container boot
+```
+
+`scripts/seed.js` prints both tenants' API keys and creates a demo widget.
+
+### Run the demo site (a genuinely different origin)
+
+```bash
+DEMO_WIDGET_ID=<publicId from seed output> npm run demo   # serves demo/customer-site on :5500
+```
+
+Open `http://localhost:5500` — the page contains exactly the one `<script>` line `GET /api/widgets/:id/embed` would give a real customer, filled in by the script itself from the live API, never hand-typed.
+
+### Local dev without Docker
 
 ```bash
 cp .env.example .env
-docker compose up --build       # API + Postgres + worker
-docker compose exec app npm run seed
+npm ci
+npm run migrate
+node scripts/seed.js
+node src/server.js
 ```
 
-Demo customer site (second origin): `npx serve demo -l 5500` then open `http://localhost:5500`.
+### Tests and self-attack
+
+```bash
+npm test          # 27 tests: submission (9), resilience (9), rate-limit (1), browser/jsdom cross-origin (3), dashboard (5)
+npm run attack     # plays the attacker against a RUNNING server (start it first); regenerates EVIDENCE.md
+```
+
+## API surface
+
+| Who | Auth | Routes |
+|---|---|---|
+| Widget owner | `X-API-Key` header | `POST/GET/PATCH/DELETE /api/widgets[/:id]`, `GET /api/widgets/:id/submissions`, `GET /api/dashboard/{submissions,stats}` |
+| Customer's site | none (public, CORS `*`) | `GET /widget-runtime.js`, `GET /widgets/:publicId/embed.js`, `GET /widgets/:publicId/config` |
+| Website visitor | none (public, CORS `*`) | `POST /widgets/:publicId/submissions` |
 
 ## Proof
 
-Every requirement has a pasted proof in [`EVIDENCE.md`](EVIDENCE.md). AI usage is logged honestly in [`BUILDLOG.md`](BUILDLOG.md).
+Every acceptance probe and the multi-tenant isolation requirement are backed by a real captured run in [`EVIDENCE.md`](EVIDENCE.md) (generated by `npm run attack` against a live server) plus 27 named automated tests. AI usage across all three build phases is logged honestly in [`BUILDLOG.md`](BUILDLOG.md).
 
 ## Limitations
 
-See section 12 of the design doc. The short version: in-memory rate limiting (single instance), free geo APIs with quotas, raw IPs stored.
+- Rate limiting is in-memory — correct for one instance, not a cluster.
+- `GEO_MODE=mock` by default (deterministic, no network calls); `GEO_MODE=live` calls the real free-tier ip-api.com/ipapi.co and is subject to their quotas.
+- Raw visitor IPs are stored (`inet`); a real product would need a retention policy or hashing.
+- `DESIGN.md` describes the Phase 1 draft (Bearer auth, `/admin/widgets`); the shipped API differs slightly (`X-API-Key`, `/api/widgets`) — this README and `capstone.yaml` reflect what's actually running.
 
 ## License
 

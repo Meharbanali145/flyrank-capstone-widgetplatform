@@ -16,6 +16,9 @@ import { notFoundHandler, createErrorHandler } from './middleware/errorHandler.j
 import { createWidgetRoutes } from './routes/widgets.js';
 import { createPublicRoutes } from './routes/public.js';
 import { createControlRoutes } from './routes/control.js';
+import { createDashboardRoutes } from './routes/dashboard.js';
+import { createDashboardService } from './services/dashboardService.js';
+import { createDashboardQueries } from './repos/submissionRepo.js';
 
 export function buildApp(overrides = {}) {
   const config = overrides.config ?? loadConfig();
@@ -32,6 +35,8 @@ export function buildApp(overrides = {}) {
 
   const widgetService = createWidgetService(widgetRepo, config);
   const submissionService = createSubmissionService({ pool, widgetRepo, submissionRepo, jobRepo, geoChain, logger, config });
+  const dashboardQueries = createDashboardQueries(pool);
+  const dashboardService = createDashboardService(submissionRepo, dashboardQueries);
   const { ipLimiter, widgetLimiter } = createRateLimiters(config);
 
   const app = express();
@@ -40,8 +45,9 @@ export function buildApp(overrides = {}) {
   app.use(express.json({ limit: config.MAX_BODY_BYTES, strict: true }));
 
   app.get('/health', (_req, res) => res.json({ ok: true }));
-  app.use('/api/widgets', ipLimiter, createWidgetRoutes({ tenantRepo, widgetService }));
-  app.use('/', createPublicRoutes({ widgetService, widgetRepo, submissionService, widgetLimiter }));
+  app.use('/api/widgets', ipLimiter, createWidgetRoutes({ tenantRepo, widgetService, submissionRepo }));
+  app.use('/api/dashboard', ipLimiter, createDashboardRoutes({ tenantRepo, dashboardService, widgetRepo }));
+  app.use('/', createPublicRoutes({ widgetService, widgetRepo, submissionService, widgetLimiter, config }));
   if (config.ENABLE_TEST_CONTROLS) app.use('/__control', createControlRoutes({ config, faults, jobRepo }));
 
   app.use(notFoundHandler);
